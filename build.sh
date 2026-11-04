@@ -12,6 +12,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/WallParallax"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+xattr -cr "$APP"
 codesign --force --sign - "$APP"
 
 echo "Built $APP — run with: open $APP"
