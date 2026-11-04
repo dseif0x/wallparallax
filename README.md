@@ -10,7 +10,10 @@ A native macOS menu-bar app that turns your desktop wallpaper into a 3D "window"
   - a file you pick,
   - a sibling file named like `photo_depth.png` / `photo-depth.png` (found automatically),
   - the depth embedded in iPhone **Portrait mode** photos (HEIC/JPEG), used automatically.
-  - **AI depth estimation** for any other photo, on-device, with Apple's Core ML build of [Depth Anything V2 Small](https://huggingface.co/apple/coreml-depth-anything-v2-small) (Apache-2.0). Click *Download AI depth model (48 MB)* once. It's stored in `~/Library/Application Support/WallParallax`.
+  - **AI depth estimation** for any other photo, on-device, with Apple's Core ML build of [Depth Anything V2 Small](https://huggingface.co/apple/coreml-depth-anything-v2-small) (Apache-2.0). Click *Download model (48 MB)* once.
+  - **Apple Depth Pro** as an optional *High quality* model: much sharper object edges, using the [Core ML conversion](https://huggingface.co/coreml-projects/DepthPro-coreml-normalized-inverse-depth-pruned-10-quantized-linear) (744 MB). The first install takes a few minutes while macOS prepares the model; after that, a photo takes about 15 s. It's under Apple's research license (personal, non-commercial use only).
+
+  Models live in `~/Library/Application Support/WallParallax`. Estimated depth maps are cached there too, so each photo is processed only once per model.
 
   Depth maps from tools like Depth Anything or MiDaS work as-is. Use *Invert depth map* if near shows up as dark. If no depth is available, the photo falls back to the subject cut-out mode below.
 - **Photo (auto 3D)**: pick any photo. Vision cuts out the subject, the hole behind it is filled in, and the subject floats in front of the background.
@@ -40,4 +43,4 @@ Grant camera access when asked. The app lives in the menu bar (cube icon). Copy 
 
 ## Dev
 
-`WallParallax --snapshot <dir> [--photo <image>] [--install-model] [--depth-photo <image> [--depth-map <map>]]` renders each scene at a few head positions to PNGs without using the camera. With `--photo`, it also writes the photo's foreground and background layers. With `--depth-photo`, it writes the processed depth map and depth-mesh renders.
+`WallParallax --snapshot <dir> [--photo <image>] [--model depthAnything|depthPro] [--install-model] [--depth-photo <image> [--depth-map <map>]]` renders each scene at a few head positions to PNGs without using the camera. With `--photo`, it also writes the photo's foreground and background layers. With `--depth-photo`, it writes the processed depth map and depth-mesh renders.

@@ -8,7 +8,7 @@ struct DepthPhoto {
     enum Source: Equatable {
         case file(URL)
         case embedded
-        case estimated
+        case estimated(DepthModelKind)
     }
 
     let color: CGImage
@@ -29,8 +29,8 @@ final class DepthPhotoLoader {
         let image: URL
         let depthMap: URL?
         let invert: Bool
-        /// Fall back to AI depth estimation when no depth map exists.
-        let useModel: Bool
+        /// AI model to fall back to when no depth map exists.
+        let model: DepthModelKind?
     }
 
     private var cache: (key: Key, photo: DepthPhoto)?
@@ -69,9 +69,10 @@ final class DepthPhotoLoader {
         } else if let embedded = Self.embeddedDepth(in: key.image) {
             raw = embedded
             source = .embedded
-        } else if key.useModel, let estimated = DepthModel.shared.estimateDepth(for: color) {
+        } else if let kind = key.model,
+                  let estimated = DepthModel.model(for: kind).estimateDepth(for: color, cacheKey: DepthModel.cacheKey(for: key.image)) {
             raw = estimated
-            source = .estimated
+            source = .estimated(kind)
         } else {
             return nil
         }
@@ -166,6 +167,7 @@ final class DepthPhotoLoader {
         let rowBytes = CVPixelBufferGetBytesPerRow(buffer)
 
         let format = CVPixelBufferGetPixelFormatType(buffer)
+        let isByte = format == kCVPixelFormatType_OneComponent8
         let isHalf = [kCVPixelFormatType_OneComponent16Half, kCVPixelFormatType_DisparityFloat16,
                       kCVPixelFormatType_DepthFloat16].contains(format)
 
@@ -174,7 +176,10 @@ final class DepthPhotoLoader {
             for y in 0..<height {
                 let row = base + y * rowBytes
                 let dst = out.baseAddress! + y * width
-                if isHalf {
+                if isByte {
+                    let src = row.assumingMemoryBound(to: UInt8.self)
+                    for x in 0..<width { dst[x] = Float(src[x]) }
+                } else if isHalf {
                     var src = vImage_Buffer(data: row, height: 1, width: vImagePixelCount(width), rowBytes: width * 2)
                     var dstBuf = vImage_Buffer(data: dst, height: 1, width: vImagePixelCount(width), rowBytes: width * 4)
                     vImageConvert_Planar16FtoPlanarF(&src, &dstBuf, 0)

@@ -76,10 +76,12 @@ final class ParallaxView: NSView {
             installSubjectPhoto(url, ctx: ctx, token: token)
         case .depthPhoto:
             guard let url = state.depthPhotoURL else { install(Scenes.mountains(ctx)); return }
-            let modelReady = DepthModel.shared.isReady
+            let model = DepthModel.best(preferring: state.depthModel)
+            let modelReady = model != nil
             let key = DepthPhotoLoader.Key(image: url, depthMap: state.depthMapURL, invert: state.invertDepth,
-                                           useModel: modelReady)
-            state.depthStatus = modelReady ? "Estimating depth…" : "Loading…"
+                                           model: model?.kind)
+            state.depthStatus = model?.kind == .depthPro ? "Estimating depth with Depth Pro (about 15 s)…"
+                : modelReady ? "Estimating depth…" : "Loading…"
             DepthPhotoLoader.shared.load(key) { [weak self] photo in
                 guard let self, self.buildToken == token else { return }
                 if let photo, let renderer = DepthRenderer(photo: photo, screen: ctx.screen,
@@ -87,7 +89,8 @@ final class ParallaxView: NSView {
                     switch photo.source {
                     case .file(let file): self.state.depthStatus = "Depth from \(file.lastPathComponent)"
                     case .embedded: self.state.depthStatus = "Depth from Portrait photo"
-                    case .estimated: self.state.depthStatus = "Depth estimated with AI"
+                    case .estimated(let kind):
+                        self.state.depthStatus = kind == .depthPro ? "Depth estimated with Depth Pro" : "Depth estimated with Depth Anything"
                     }
                     self.install([], renderer: renderer)
                 } else {

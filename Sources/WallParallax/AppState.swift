@@ -39,6 +39,7 @@ final class AppState: ObservableObject {
     /// nil = find automatically (sibling `*_depth` file or embedded depth).
     @Published var depthMapURL: URL? { didSet { defaults.set(depthMapURL?.path, forKey: "depthMapPath") } }
     @Published var invertDepth: Bool { didSet { defaults.set(invertDepth, forKey: "invertDepth") } }
+    @Published var depthModel: DepthModelKind { didSet { defaults.set(depthModel.rawValue, forKey: "depthModel") } }
     /// Where the current depth photo's depth came from (not persisted).
     @Published var depthStatus = ""
 
@@ -66,6 +67,7 @@ final class AppState: ObservableObject {
         depthPhotoURL = defaults.string(forKey: "depthPhotoPath").map { URL(fileURLWithPath: $0) }
         depthMapURL = defaults.string(forKey: "depthMapPath").map { URL(fileURLWithPath: $0) }
         invertDepth = defaults.bool(forKey: "invertDepth")
+        depthModel = DepthModelKind(rawValue: defaults.string(forKey: "depthModel") ?? "") ?? .depthAnything
         layerURLs = (defaults.stringArray(forKey: "layerPaths") ?? []).map { URL(fileURLWithPath: $0) }
     }
 }

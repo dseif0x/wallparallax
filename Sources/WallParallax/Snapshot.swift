@@ -37,16 +37,20 @@ enum Snapshot {
                     .write(to: dir.appendingPathComponent("\(name)-\(poseName).png"))
             }
         }
+        // --model depthAnything|depthPro picks the model; --install-model downloads it first.
+        let kind = args.firstIndex(of: "--model").flatMap { $0 + 1 < args.count ? DepthModelKind(rawValue: args[$0 + 1]) : nil }
+            ?? .depthAnything
+        let model = DepthModel.model(for: kind)
         if args.contains("--install-model") {
             let done = DispatchSemaphore(value: 0)
-            Task.detached { await DepthModel.shared.install(); done.signal() }
+            Task.detached { await model.install(); done.signal() }
             done.wait()
-            print("model installed: \(DepthModel.shared.isReady) at \(DepthModel.compiledURL.path)")
+            print("model installed: \(model.isReady) at \(model.compiledURL.path)")
         }
         if let j = args.firstIndex(of: "--depth-photo"), j + 1 < args.count {
             let map = args.firstIndex(of: "--depth-map").flatMap { $0 + 1 < args.count ? URL(fileURLWithPath: args[$0 + 1]) : nil }
             let key = DepthPhotoLoader.Key(image: URL(fileURLWithPath: args[j + 1]), depthMap: map, invert: false,
-                                              useModel: DepthModel.shared.isReady)
+                                              model: model.isReady ? kind : nil)
             if let photo = DepthPhotoLoader.shared.process(key),
                let renderer = DepthRenderer(photo: photo, screen: size, overscan: ctx.overscan, scale: 1) {
                 print("depth source: \(photo.source)")

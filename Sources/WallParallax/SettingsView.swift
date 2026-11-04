@@ -44,7 +44,14 @@ struct SettingsView: View {
                     Label(state.depthStatus, systemImage: "info.circle")
                         .font(.caption).fixedSize(horizontal: false, vertical: true)
                 }
-                DepthModelRow(model: DepthModel.shared)
+                Picker("AI depth", selection: $state.depthModel) {
+                    ForEach(DepthModelKind.allCases) { Text($0.title).tag($0) }
+                }
+                DepthModelRow(model: DepthModel.model(for: state.depthModel))
+                if state.depthModel == .depthPro {
+                    Text("Depth Pro: sharp edges, slower. Apple research license: personal, non-commercial use only.")
+                        .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
                 Text("Automatic depth: a “photo_depth.png” file next to the photo, the depth in iPhone Portrait photos, or AI estimation. Depth maps are grayscale, white = near.")
                     .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
@@ -128,16 +135,17 @@ private struct DepthModelRow: View {
         HStack(spacing: 6) {
             switch model.state {
             case .notInstalled:
-                Button("Download AI depth model (48 MB)") { Task { await model.install() } }
-            case .downloading:
-                ProgressView().controlSize(.small)
-                Text("Downloading AI depth model…").font(.caption)
+                Button("Download model (\(model.kind.downloadSize))") { Task { await model.install() } }
+            case .downloading(let fraction):
+                ProgressView(value: fraction).frame(maxWidth: .infinity)
+                Text("\(Int(fraction * 100))%").font(.caption).monospacedDigit()
             case .compiling:
                 ProgressView().controlSize(.small)
-                Text("Preparing AI depth model…").font(.caption)
+                Text("Preparing model for this Mac (first time only, can take a few minutes)…")
+                    .font(.caption).fixedSize(horizontal: false, vertical: true)
             case .ready:
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                Text("AI depth model installed").font(.caption).foregroundStyle(.secondary)
+                Text("Model installed").font(.caption).foregroundStyle(.secondary)
             case .failed(let message):
                 Text("Download failed: \(message)").font(.caption).foregroundStyle(.red).lineLimit(2)
                 Spacer()

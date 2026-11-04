@@ -40,9 +40,10 @@ final class WallpaperController {
         .store(in: &bag)
 
         // Re-render depth photos once the AI model finishes installing.
-        DepthModel.shared.$state
-            .dropFirst()
+        Publishers.Merge(DepthModel.depthAnything.$state.dropFirst(), DepthModel.depthPro.$state.dropFirst())
             .filter { $0 == .ready }
+            .map { _ in () }
+            .merge(with: state.$depthModel.dropFirst().map { _ in () })
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self, self.state.scene == .depthPhoto else { return }
