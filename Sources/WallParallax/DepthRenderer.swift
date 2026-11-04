@@ -1,6 +1,5 @@
 import CoreGraphics
 import Metal
-import MetalKit
 import QuartzCore
 
 /// Renders a `DepthPhoto` as a dense mesh whose vertices are displaced by the depth map:
@@ -39,12 +38,8 @@ final class DepthRenderer {
         pipeline = shared.pipeline
         depthState = shared.depthState
 
-        let loader = MTKTextureLoader(device: device)
-        let privateStorage = NSNumber(value: MTLStorageMode.private.rawValue)
-        guard let color = try? loader.newTexture(cgImage: photo.color, options: [
-                  .SRGB: false, .generateMipmaps: true, .textureStorageMode: privateStorage]),
-              let depth = try? loader.newTexture(cgImage: photo.depth, options: [
-                  .SRGB: false, .textureStorageMode: privateStorage])
+        guard let color = Self.makeTexture(photo.color, device: device, queue: queue, gray: false),
+              let depth = Self.makeTexture(photo.depth, device: device, queue: queue, gray: true)
         else { return nil }
         colorTexture = color
         depthMapTexture = depth
@@ -155,6 +150,43 @@ final class DepthRenderer {
         encoder.drawIndexedPrimitives(type: .triangle, indexCount: indexCount, indexType: .uint32,
                                       indexBuffer: indexBuffer, indexBufferOffset: 0)
         encoder.endEncoding()
+    }
+
+    // MARK: Textures
+
+    /// Uploads an image after redrawing it into a known layout (RGBA8 sRGB, or 8-bit gray).
+    /// Decoded images come in many layouts (RGBA, XRGB, BGRA, 16-bit, P3...); letting a texture
+    /// loader guess can shift channels, e.g. reading XRGB JPEGs as RGBA tints everything pink.
+    private static func makeTexture(_ image: CGImage, device: MTLDevice, queue: MTLCommandQueue, gray: Bool) -> MTLTexture? {
+        let width = image.width, height = image.height
+        let bytesPerPixel = gray ? 1 : 4
+        let rowBytes = width * bytesPerPixel
+        var pixels = [UInt8](repeating: 0, count: rowBytes * height)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            let space = gray ? CGColorSpaceCreateDeviceGray() : CGColorSpace(name: CGColorSpace.sRGB)!
+            let info = gray ? CGImageAlphaInfo.none.rawValue
+                : CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+            guard let ctx = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                                      bytesPerRow: rowBytes, space: space, bitmapInfo: info) else { return false }
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        guard drawn else { return nil }
+
+        let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: gray ? .r8Unorm : .rgba8Unorm,
+                                                            width: width, height: height, mipmapped: !gray)
+        desc.usage = .shaderRead
+        desc.storageMode = .shared
+        guard let texture = device.makeTexture(descriptor: desc) else { return nil }
+        // Row 0 of the bitmap is the top of the image, matching texture v = 0 at the top.
+        texture.replace(region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0,
+                        withBytes: pixels, bytesPerRow: rowBytes)
+        if !gray, let commands = queue.makeCommandBuffer(), let blit = commands.makeBlitCommandEncoder() {
+            blit.generateMipmaps(for: texture)
+            blit.endEncoding()
+            commands.commit()
+        }
+        return texture
     }
 
     // MARK: Shared pipeline
