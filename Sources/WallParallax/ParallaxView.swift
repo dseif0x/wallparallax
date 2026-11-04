@@ -80,8 +80,11 @@ final class ParallaxView: NSView {
             let modelReady = model != nil
             let key = DepthPhotoLoader.Key(image: url, depthMap: state.depthMapURL, invert: state.invertDepth,
                                            model: model?.kind)
-            state.depthStatus = model?.kind == .depthPro ? "Estimating depth with Depth Pro (about 15 s)…"
-                : modelReady ? "Estimating depth…" : "Loading…"
+            // The first use of a model in this app (or after a macOS update) includes a one-time,
+            // CPU-only preparation step that can take minutes; later photos take seconds.
+            state.depthStatus = modelReady
+                ? "Estimating depth… The first run of a model prepares it for this Mac and can take a few minutes."
+                : "Loading…"
             DepthPhotoLoader.shared.load(key) { [weak self] photo in
                 guard let self, self.buildToken == token else { return }
                 if let photo, let renderer = DepthRenderer(photo: photo, screen: ctx.screen,
