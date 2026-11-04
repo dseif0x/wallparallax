@@ -75,32 +75,46 @@ final class PhotoProcessor {
             .applyingFilter("CIMorphologyMaximum", parameters: [kCIInputRadiusKey: max(4, longSide * 0.008)])
             .cropped(to: extent)
 
-        // Background with a hole where the subject was...
-        var filled = clear.applyingFilter("CIBlendWithMask", parameters: [
-            kCIInputBackgroundImageKey: image,
-            kCIInputMaskImageKey: grown,
-        ])
-        // ...filled from the outside in with progressively wider blurs (push-pull style).
+        // The fill is blurry by nature, so compute it on a small copy (fast even for 48 MP photos)...
+        let fillScale = min(1, 640 / longSide)
+        let small = CGAffineTransform(scaleX: fillScale, y: fillScale)
+        let smallExtent = extent.applying(small).integral
+        let smallLong = Double(max(smallExtent.width, smallExtent.height))
+        var filled = clear.transformed(by: small).applyingFilter("CIBlendWithMask", parameters: [
+            kCIInputBackgroundImageKey: image.transformed(by: small),
+            kCIInputMaskImageKey: grown.transformed(by: small),
+        ]).cropped(to: smallExtent)
+        // ...filling the hole from the outside in with progressively wider blurs (push-pull style).
         for fraction in [0.01, 0.02, 0.04, 0.08, 0.16, 0.32] {
             let spread = filled
                 .clampedToExtent()
-                .applyingGaussianBlur(sigma: Double(longSide) * fraction)
+                .applyingGaussianBlur(sigma: smallLong * fraction)
                 // Color filters work on un-premultiplied color, i.e. blur(rgb·a)/blur(a): the average
                 // of nearby known pixels. Boost coverage so the fill becomes opaque quickly.
                 .applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: 25)])
                 .applyingFilter("CIColorClamp")
-                .cropped(to: extent)
+                .cropped(to: smallExtent)
             filled = filled.composited(over: spread)
         }
-        filled = filled.settingAlphaOne(in: extent)
+        // Rasterize the small fill now, then scale it back up.
+        guard let smallFill = context.createCGImage(filled.settingAlphaOne(in: smallExtent), from: smallExtent,
+                                                    format: .RGBA8, colorSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                                                    deferred: false)
+        else { return Result(background: cgImage, foreground: nil) }
+        filled = CIImage(cgImage: smallFill)
+            .transformed(by: CGAffineTransform(scaleX: extent.width / smallExtent.width, y: extent.height / smallExtent.height))
+            .clampedToExtent()
+            .cropped(to: extent)
         let background = filled.applyingFilter("CIBlendWithMask", parameters: [
             kCIInputBackgroundImageKey: image,
             kCIInputMaskImageKey: grown,
         ])
 
         let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
-        guard let bg = context.createCGImage(background, from: extent, format: .RGBA8, colorSpace: sRGB),
-              let fg = context.createCGImage(foreground, from: extent, format: .RGBA8, colorSpace: sRGB)
+        // deferred: false renders right here on the background queue. A deferred image would be
+        // rendered lazily by Core Animation on the main thread, freezing the app.
+        guard let bg = context.createCGImage(background, from: extent, format: .RGBA8, colorSpace: sRGB, deferred: false),
+              let fg = context.createCGImage(foreground, from: extent, format: .RGBA8, colorSpace: sRGB, deferred: false)
         else { return Result(background: cgImage, foreground: nil) }
         return Result(background: bg, foreground: fg)
     }
