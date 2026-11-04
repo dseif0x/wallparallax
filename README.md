@@ -1,1 +1,35 @@
-# wallparallax
+# WallParallax
+
+A native macOS menu-bar app that turns your desktop wallpaper into a 3D "window": it tracks your head with the camera and shifts layered wallpapers so near and far elements move at different speeds (head-coupled parallax).
+
+## Features
+
+- **Head tracking** with the built-in camera and Vision face detection, smoothed with a 1€ filter and interpolated to the display's refresh rate.
+- **Built-in scenes**, drawn as vector layers so they're sharp at any resolution: *Mountains at Dusk*, *Deep Space*, *Bokeh Orbs*.
+- **Photo (auto 3D)**: pick any photo. Vision cuts out the subject, the hole behind it is filled in, and the subject floats in front of the background.
+- **Custom Layers**: pick several transparent PNGs. They're sorted by file name, with the first one farthest back.
+- Lean in to zoom, intensity and smoothing sliders, recenter, auto-recenter, multi-monitor support, and launch at login.
+- The camera turns off when the wallpaper is disabled, the screen sleeps, or the Mac is locked.
+
+## Build & run
+
+Requires macOS 14+ and Xcode / the Swift toolchain.
+
+```sh
+./build.sh            # builds build/WallParallax.app (ad-hoc signed)
+open build/WallParallax.app
+```
+
+Grant camera access when asked. The app lives in the menu bar (cube icon). Copy it to `/Applications` if you want to use *Launch at login*.
+
+> Because the build is ad-hoc signed, macOS may ask for camera permission again after a rebuild.
+
+## How it works
+
+- `WallpaperWindow` is a borderless, click-through window at desktop level on every screen. It sits above the system wallpaper and below the desktop icons.
+- Each scene is a stack of `DepthLayer`s. Depth `1` is far away and moves the most with your head, like the view through a real window. Depth `0` sits at the screen plane and stays put.
+- `HeadTracker` maps the face's position and size in the camera frame to an x/y/z offset from a calibrated neutral pose.
+
+## Dev
+
+`WallParallax --snapshot <dir> [--photo <image>]` renders each scene at a few head positions to PNGs without using the camera. With `--photo`, it also writes the photo's foreground and background layers.
