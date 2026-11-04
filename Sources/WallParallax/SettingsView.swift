@@ -40,7 +40,12 @@ struct SettingsView: View {
                     Button("Choose Depth Map…") { pickImage { state.depthMapURL = $0 } }
                 }
                 Toggle("Invert depth map", isOn: $state.invertDepth)
-                Text("Depth map: grayscale, white = near. Automatic finds “photo_depth.png” next to the photo or the depth embedded in iPhone Portrait photos.")
+                if !state.depthStatus.isEmpty, state.depthPhotoURL != nil {
+                    Label(state.depthStatus, systemImage: "info.circle")
+                        .font(.caption).fixedSize(horizontal: false, vertical: true)
+                }
+                DepthModelRow(model: DepthModel.shared)
+                Text("Automatic depth: a “photo_depth.png” file next to the photo, the depth in iPhone Portrait photos, or AI estimation. Depth maps are grayscale, white = near.")
                     .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             if state.scene == .photo {
@@ -111,6 +116,32 @@ struct SettingsView: View {
         if panel.runModal() == .OK, !panel.urls.isEmpty {
             state.layerURLs = panel.urls.sorted {
                 $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+            }
+        }
+    }
+}
+
+private struct DepthModelRow: View {
+    @ObservedObject var model: DepthModel
+
+    var body: some View {
+        HStack(spacing: 6) {
+            switch model.state {
+            case .notInstalled:
+                Button("Download AI depth model (48 MB)") { Task { await model.install() } }
+            case .downloading:
+                ProgressView().controlSize(.small)
+                Text("Downloading AI depth model…").font(.caption)
+            case .compiling:
+                ProgressView().controlSize(.small)
+                Text("Preparing AI depth model…").font(.caption)
+            case .ready:
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text("AI depth model installed").font(.caption).foregroundStyle(.secondary)
+            case .failed(let message):
+                Text("Download failed: \(message)").font(.caption).foregroundStyle(.red).lineLimit(2)
+                Spacer()
+                Button("Retry") { Task { await model.install() } }
             }
         }
     }

@@ -39,6 +39,8 @@ final class AppState: ObservableObject {
     /// nil = find automatically (sibling `*_depth` file or embedded depth).
     @Published var depthMapURL: URL? { didSet { defaults.set(depthMapURL?.path, forKey: "depthMapPath") } }
     @Published var invertDepth: Bool { didSet { defaults.set(invertDepth, forKey: "invertDepth") } }
+    /// Where the current depth photo's depth came from (not persisted).
+    @Published var depthStatus = ""
 
     private init() {
         defaults.register(defaults: [

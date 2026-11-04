@@ -1,3 +1,4 @@
+import Accelerate
 import AVFoundation
 import CoreImage
 import ImageIO
@@ -7,6 +8,7 @@ struct DepthPhoto {
     enum Source: Equatable {
         case file(URL)
         case embedded
+        case estimated
     }
 
     let color: CGImage
@@ -18,7 +20,8 @@ struct DepthPhoto {
 /// Loads a photo and finds its depth map, in this order:
 /// 1. the depth map file the user picked,
 /// 2. a sibling file such as `photo_depth.png` / `photo-depth.png`,
-/// 3. depth/disparity embedded in the photo (iPhone Portrait mode HEIC/JPEG).
+/// 3. depth/disparity embedded in the photo (iPhone Portrait mode HEIC/JPEG),
+/// 4. AI depth estimation, if the model is installed.
 final class DepthPhotoLoader {
     static let shared = DepthPhotoLoader()
 
@@ -26,6 +29,8 @@ final class DepthPhotoLoader {
         let image: URL
         let depthMap: URL?
         let invert: Bool
+        /// Fall back to AI depth estimation when no depth map exists.
+        let useModel: Bool
     }
 
     private var cache: (key: Key, photo: DepthPhoto)?
@@ -64,6 +69,9 @@ final class DepthPhotoLoader {
         } else if let embedded = Self.embeddedDepth(in: key.image) {
             raw = embedded
             source = .embedded
+        } else if key.useModel, let estimated = DepthModel.shared.estimateDepth(for: color) {
+            raw = estimated
+            source = .estimated
         } else {
             return nil
         }
@@ -157,15 +165,28 @@ final class DepthPhotoLoader {
         let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
         let rowBytes = CVPixelBufferGetBytesPerRow(buffer)
 
+        let format = CVPixelBufferGetPixelFormatType(buffer)
+        let isHalf = [kCVPixelFormatType_OneComponent16Half, kCVPixelFormatType_DisparityFloat16,
+                      kCVPixelFormatType_DepthFloat16].contains(format)
+
         var values = [Float](repeating: 0, count: width * height)
-        var lo = Float.greatestFiniteMagnitude, hi = -Float.greatestFiniteMagnitude
-        for y in 0..<height {
-            let row = (base + y * rowBytes).assumingMemoryBound(to: Float.self)
-            for x in 0..<width {
-                let v = row[x]
-                values[y * width + x] = v
-                if v.isFinite { lo = min(lo, v); hi = max(hi, v) }
+        values.withUnsafeMutableBufferPointer { out in
+            for y in 0..<height {
+                let row = base + y * rowBytes
+                let dst = out.baseAddress! + y * width
+                if isHalf {
+                    var src = vImage_Buffer(data: row, height: 1, width: vImagePixelCount(width), rowBytes: width * 2)
+                    var dstBuf = vImage_Buffer(data: dst, height: 1, width: vImagePixelCount(width), rowBytes: width * 4)
+                    vImageConvert_Planar16FtoPlanarF(&src, &dstBuf, 0)
+                } else {
+                    dst.update(from: row.assumingMemoryBound(to: Float.self), count: width)
+                }
             }
+        }
+        var lo = Float.greatestFiniteMagnitude, hi = -Float.greatestFiniteMagnitude
+        for v in values where v.isFinite {
+            lo = min(lo, v)
+            hi = max(hi, v)
         }
         guard hi > lo else { return nil }
         let bytes = values.map { v -> UInt8 in

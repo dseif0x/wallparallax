@@ -39,6 +39,17 @@ final class WallpaperController {
         .sink { [weak self] in self?.windows.forEach { $0.parallaxView.rebuild() } }
         .store(in: &bag)
 
+        // Re-render depth photos once the AI model finishes installing.
+        DepthModel.shared.$state
+            .dropFirst()
+            .filter { $0 == .ready }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self, self.state.scene == .depthPhoto else { return }
+                self.windows.forEach { $0.parallaxView.rebuild() }
+            }
+            .store(in: &bag)
+
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.recreateWindows() }

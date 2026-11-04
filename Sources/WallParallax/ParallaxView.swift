@@ -76,13 +76,24 @@ final class ParallaxView: NSView {
             installSubjectPhoto(url, ctx: ctx, token: token)
         case .depthPhoto:
             guard let url = state.depthPhotoURL else { install(Scenes.mountains(ctx)); return }
-            let key = DepthPhotoLoader.Key(image: url, depthMap: state.depthMapURL, invert: state.invertDepth)
+            let modelReady = DepthModel.shared.isReady
+            let key = DepthPhotoLoader.Key(image: url, depthMap: state.depthMapURL, invert: state.invertDepth,
+                                           useModel: modelReady)
+            state.depthStatus = modelReady ? "Estimating depth…" : "Loading…"
             DepthPhotoLoader.shared.load(key) { [weak self] photo in
                 guard let self, self.buildToken == token else { return }
                 if let photo, let renderer = DepthRenderer(photo: photo, screen: ctx.screen,
                                                            overscan: ctx.overscan, scale: ctx.scale) {
+                    switch photo.source {
+                    case .file(let file): self.state.depthStatus = "Depth from \(file.lastPathComponent)"
+                    case .embedded: self.state.depthStatus = "Depth from Portrait photo"
+                    case .estimated: self.state.depthStatus = "Depth estimated with AI"
+                    }
                     self.install([], renderer: renderer)
                 } else {
+                    self.state.depthStatus = modelReady
+                        ? "Couldn't get depth. Showing subject cut-out instead."
+                        : "No depth map found. Showing subject cut-out instead. Download the AI model to estimate depth."
                     // No depth map found: fall back to the Vision subject cut-out.
                     self.installSubjectPhoto(url, ctx: ctx, token: token)
                 }
