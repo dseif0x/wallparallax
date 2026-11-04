@@ -22,6 +22,27 @@ struct SettingsView: View {
                 ForEach(SceneKind.allCases) { Text($0.title).tag($0) }
             }
 
+            if state.scene == .depthPhoto {
+                HStack {
+                    Text(state.depthPhotoURL?.lastPathComponent ?? "No photo chosen")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    Button("Choose Photo…") { pickImage { state.depthPhotoURL = $0 } }
+                }
+                HStack {
+                    Text(state.depthMapURL.map { "Depth: \($0.lastPathComponent)" } ?? "Depth: automatic")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    if state.depthMapURL != nil {
+                        Button { state.depthMapURL = nil } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.borderless).help("Use automatic depth")
+                    }
+                    Button("Choose Depth Map…") { pickImage { state.depthMapURL = $0 } }
+                }
+                Toggle("Invert depth map", isOn: $state.invertDepth)
+                Text("Depth map: grayscale, white = near. Automatic finds “photo_depth.png” next to the photo or the depth embedded in iPhone Portrait photos.")
+                    .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
             if state.scene == .photo {
                 HStack {
                     Text(state.photoURL?.lastPathComponent ?? "No photo chosen")
@@ -72,6 +93,14 @@ struct SettingsView: View {
         panel.allowsMultipleSelection = false
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK, let url = panel.url { state.photoURL = url }
+    }
+
+    private func pickImage(_ assign: (URL) -> Void) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        NSApp.activate(ignoringOtherApps: true)
+        if panel.runModal() == .OK, let url = panel.url { assign(url) }
     }
 
     private func chooseLayers() {

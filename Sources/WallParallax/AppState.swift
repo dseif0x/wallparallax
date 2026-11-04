@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 enum SceneKind: String, CaseIterable, Identifiable {
-    case mountains, space, orbs, photo, layers
+    case mountains, space, orbs, depthPhoto, photo, layers
 
     var id: String { rawValue }
 
@@ -11,6 +11,7 @@ enum SceneKind: String, CaseIterable, Identifiable {
         case .mountains: "Mountains at Dusk"
         case .space: "Deep Space"
         case .orbs: "Bokeh Orbs"
+        case .depthPhoto: "Photo + Depth Map"
         case .photo: "Photo (auto 3D)"
         case .layers: "Custom Layers"
         }
@@ -34,6 +35,10 @@ final class AppState: ObservableObject {
     @Published var autoRecenter: Bool { didSet { defaults.set(autoRecenter, forKey: "autoRecenter") } }
     @Published var photoURL: URL? { didSet { defaults.set(photoURL?.path, forKey: "photoPath") } }
     @Published var layerURLs: [URL] { didSet { defaults.set(layerURLs.map(\.path), forKey: "layerPaths") } }
+    @Published var depthPhotoURL: URL? { didSet { defaults.set(depthPhotoURL?.path, forKey: "depthPhotoPath") } }
+    /// nil = find automatically (sibling `*_depth` file or embedded depth).
+    @Published var depthMapURL: URL? { didSet { defaults.set(depthMapURL?.path, forKey: "depthMapPath") } }
+    @Published var invertDepth: Bool { didSet { defaults.set(invertDepth, forKey: "invertDepth") } }
 
     private init() {
         defaults.register(defaults: [
@@ -45,6 +50,7 @@ final class AppState: ObservableObject {
             "invertHorizontal": false,
             "reverseParallax": false,
             "autoRecenter": true,
+            "invertDepth": false,
         ])
         enabled = defaults.bool(forKey: "enabled")
         scene = SceneKind(rawValue: defaults.string(forKey: "scene") ?? "") ?? .mountains
@@ -55,6 +61,9 @@ final class AppState: ObservableObject {
         reverseParallax = defaults.bool(forKey: "reverseParallax")
         autoRecenter = defaults.bool(forKey: "autoRecenter")
         photoURL = defaults.string(forKey: "photoPath").map { URL(fileURLWithPath: $0) }
+        depthPhotoURL = defaults.string(forKey: "depthPhotoPath").map { URL(fileURLWithPath: $0) }
+        depthMapURL = defaults.string(forKey: "depthMapPath").map { URL(fileURLWithPath: $0) }
+        invertDepth = defaults.bool(forKey: "invertDepth")
         layerURLs = (defaults.stringArray(forKey: "layerPaths") ?? []).map { URL(fileURLWithPath: $0) }
     }
 }

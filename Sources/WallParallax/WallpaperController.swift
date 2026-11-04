@@ -29,9 +29,12 @@ final class WallpaperController {
             state.$scene.map { _ in () }.eraseToAnyPublisher(),
             state.$intensity.map { _ in () }.eraseToAnyPublisher(),
             state.$photoURL.map { _ in () }.eraseToAnyPublisher(),
-            state.$layerURLs.map { _ in () }.eraseToAnyPublisher()
+            state.$layerURLs.map { _ in () }.eraseToAnyPublisher(),
+            state.$depthPhotoURL.map { _ in () }.eraseToAnyPublisher(),
+            state.$depthMapURL.map { _ in () }.eraseToAnyPublisher(),
+            state.$invertDepth.map { _ in () }.eraseToAnyPublisher()
         )
-        .dropFirst(4)
+        .dropFirst(7)
         .debounce(for: .milliseconds(120), scheduler: DispatchQueue.main)
         .sink { [weak self] in self?.windows.forEach { $0.parallaxView.rebuild() } }
         .store(in: &bag)

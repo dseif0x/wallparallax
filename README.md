@@ -6,6 +6,12 @@ A native macOS menu-bar app that turns your desktop wallpaper into a 3D "window"
 
 - **Head tracking** with the built-in camera and Vision face detection, smoothed with a 1€ filter and interpolated to the display's refresh rate.
 - **Built-in scenes**, drawn as vector layers so they're sharp at any resolution: *Mountains at Dusk*, *Deep Space*, *Bokeh Orbs*.
+- **Photo + Depth Map**: real per-pixel 3D. A Metal mesh is displaced by a grayscale depth map (white = near), so every pixel moves according to its own depth. The depth map can be:
+  - a file you pick,
+  - a sibling file named like `photo_depth.png` / `photo-depth.png` (found automatically),
+  - the depth embedded in iPhone **Portrait mode** photos (HEIC/JPEG), used automatically.
+
+  Depth maps from tools like Depth Anything or MiDaS work as-is. Use *Invert depth map* if near shows up as dark. Without a depth map, the photo falls back to the subject cut-out mode below.
 - **Photo (auto 3D)**: pick any photo. Vision cuts out the subject, the hole behind it is filled in, and the subject floats in front of the background.
 - **Custom Layers**: pick several transparent PNGs. They're sorted by file name, with the first one farthest back.
 - Lean in to zoom, intensity and smoothing sliders, recenter, auto-recenter, multi-monitor support, and launch at login.
@@ -28,8 +34,9 @@ Grant camera access when asked. The app lives in the menu bar (cube icon). Copy 
 
 - `WallpaperWindow` is a borderless, click-through window at desktop level on every screen. It sits above the system wallpaper and below the desktop icons.
 - Each scene is a stack of `DepthLayer`s. Depth `1` is far away and moves the most with your head, like the view through a real window. Depth `0` sits at the screen plane and stays put.
+- Depth photos are drawn by `DepthRenderer`: a 240-column grid mesh whose vertices sample the depth map in the vertex shader. Depth is slightly dilated and blurred first, so depth edges stretch the background instead of tearing the subject. It only redraws when your head moves.
 - `HeadTracker` maps the face's position and size in the camera frame to an x/y/z offset from a calibrated neutral pose.
 
 ## Dev
 
-`WallParallax --snapshot <dir> [--photo <image>]` renders each scene at a few head positions to PNGs without using the camera. With `--photo`, it also writes the photo's foreground and background layers.
+`WallParallax --snapshot <dir> [--photo <image>] [--depth-photo <image> [--depth-map <map>]]` renders each scene at a few head positions to PNGs without using the camera. With `--photo`, it also writes the photo's foreground and background layers. With `--depth-photo`, it writes the processed depth map and depth-mesh renders.

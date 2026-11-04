@@ -14,6 +14,7 @@ final class ParallaxView: NSView {
     private let tracker = HeadTracker.shared
 
     private var depthLayers: [DepthLayer] = []
+    private var depthRenderer: DepthRenderer?
     private var link: CADisplayLink?
     private var current = HeadPose()
     private var lastTimestamp: CFTimeInterval = 0
@@ -72,12 +73,18 @@ final class ParallaxView: NSView {
         case .orbs: install(Scenes.orbs(ctx))
         case .photo:
             guard let url = state.photoURL else { install(Scenes.mountains(ctx)); return }
-            PhotoProcessor.shared.load(url) { [weak self] result in
+            installSubjectPhoto(url, ctx: ctx, token: token)
+        case .depthPhoto:
+            guard let url = state.depthPhotoURL else { install(Scenes.mountains(ctx)); return }
+            let key = DepthPhotoLoader.Key(image: url, depthMap: state.depthMapURL, invert: state.invertDepth)
+            DepthPhotoLoader.shared.load(key) { [weak self] photo in
                 guard let self, self.buildToken == token else { return }
-                if let result {
-                    self.install(Scenes.photo(ctx, result))
+                if let photo, let renderer = DepthRenderer(photo: photo, screen: ctx.screen,
+                                                           overscan: ctx.overscan, scale: ctx.scale) {
+                    self.install([], renderer: renderer)
                 } else {
-                    self.install(Scenes.mountains(ctx))
+                    // No depth map found: fall back to the Vision subject cut-out.
+                    self.installSubjectPhoto(url, ctx: ctx, token: token)
                 }
             }
         case .layers:
@@ -86,12 +93,22 @@ final class ParallaxView: NSView {
         }
     }
 
-    private func install(_ newLayers: [DepthLayer]) {
+    private func installSubjectPhoto(_ url: URL, ctx: SceneContext, token: Int) {
+        PhotoProcessor.shared.load(url) { [weak self] result in
+            guard let self, self.buildToken == token else { return }
+            self.install(result.map { Scenes.photo(ctx, $0) } ?? Scenes.mountains(ctx))
+        }
+    }
+
+    private func install(_ newLayers: [DepthLayer], renderer: DepthRenderer? = nil) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         depthLayers.forEach { $0.layer.removeFromSuperlayer() }
+        depthRenderer?.layer.removeFromSuperlayer()
         depthLayers = newLayers
+        depthRenderer = renderer
         newLayers.forEach { layer?.addSublayer($0.layer) }
+        if let renderer { layer?.addSublayer(renderer.layer) }
         CATransaction.commit()
         apply()
     }
@@ -132,6 +149,9 @@ final class ParallaxView: NSView {
             item.layer.setAffineTransform(CGAffineTransform(translationX: dx, y: dy).scaledBy(x: s, y: s))
         }
         CATransaction.commit()
+
+        depthRenderer?.draw(shift: CGPoint(x: x * maxShift * direction, y: y * maxShift * direction * 0.75),
+                            zoom: zoom ? z * 0.035 : 0)
     }
 }
 

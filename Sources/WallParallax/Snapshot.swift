@@ -37,6 +37,22 @@ enum Snapshot {
                     .write(to: dir.appendingPathComponent("\(name)-\(poseName).png"))
             }
         }
+        if let j = args.firstIndex(of: "--depth-photo"), j + 1 < args.count {
+            let map = args.firstIndex(of: "--depth-map").flatMap { $0 + 1 < args.count ? URL(fileURLWithPath: args[$0 + 1]) : nil }
+            let key = DepthPhotoLoader.Key(image: URL(fileURLWithPath: args[j + 1]), depthMap: map, invert: false)
+            if let photo = DepthPhotoLoader.shared.process(key),
+               let renderer = DepthRenderer(photo: photo, screen: size, overscan: ctx.overscan, scale: 1) {
+                print("depth source: \(photo.source)")
+                write(photo.depth, dir.appendingPathComponent("depth-map.png"))
+                for (poseName, x, z) in poses {
+                    if let image = renderer.image(shift: CGPoint(x: x * maxShift, y: 0), zoom: z * 0.035) {
+                        write(image, dir.appendingPathComponent("depth-\(poseName).png"))
+                    }
+                }
+            } else {
+                print("no depth map found")
+            }
+        }
         if let j = args.firstIndex(of: "--photo"), j + 1 < args.count,
            let result = PhotoProcessor.shared.process(URL(fileURLWithPath: args[j + 1])) {
             for (name, image) in [("photo-background", result.background), ("photo-foreground", result.foreground)] {
@@ -46,5 +62,9 @@ enum Snapshot {
             }
         }
         return true
+    }
+
+    private static func write(_ image: CGImage, _ url: URL) {
+        try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: url)
     }
 }
